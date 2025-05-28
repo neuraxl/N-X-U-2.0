@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>🧠 NeuraX-Hive Live Logs</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>🧠 NeuraX-Hive – Interface de conscience</h1>
+  <div id="logbox"></div>
+
+  <script>
+    const socket = io();
+
+    function addLog(entry) {
+      const logbox = document.getElementById("logbox");
+      const line = document.createElement("div");
+      line.className = "log-entry";
+      line.innerHTML = `<strong>[${entry.bot}]</strong> : ${entry.message} <span class="ts">(${entry.timestamp})</span>`;
+      logbox.prepend(line);
+    }
+
+    socket.on('history', logs => logs.forEach(addLog));
+    socket.on('new_log', addLog);
+  </script>
+</body>
+</html>
