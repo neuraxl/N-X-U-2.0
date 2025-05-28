@@ -1,0 +1,29 @@
+body {
+  background: #0f0f0f;
+  color: #eeeeee;
+  font-family: 'Courier New', monospace;
+  padding: 20px;
+}
+
+h1 {
+  color: #00ffaa;
+  text-shadow: 0 0 10px #00ffaa;
+}
+
+#logbox {
+  margin-top: 20px;
+  max-height: 80vh;
+  overflow-y: scroll;
+  border-top: 1px solid #444;
+  padding-top: 10px;
+}
+
+.log-entry {
+  padding: 5px;
+  border-bottom: 1px solid #222;
+}
+
+.ts {
+  font-size: 0.8em;
+  color: #888;
+}
