@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNIVERS N-X-U 2.0 (3D)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Custom font for a clean look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000; /* Pure black background for 3D */
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        /* Canvas for Three.js */
+        #threeCanvas {
+            position: fixed; /* Fixed position to cover the entire viewport */
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block; /* Ensure no extra space */
+            z-index: 1; /* Behind the game UI */
+            opacity: 0.8; /* Slightly transparent for effect */
+            transition: opacity 1.5s ease-in-out; /* Smooth transition for scene changes */
+        }
+
+        /* Game UI Container (smaller, top-left) */
+        .game-container {
+            position: fixed; /* Fixed position relative to the viewport */
+            top: 1rem; /* Smaller margin from top */
+            left: 1rem; /* Smaller margin from left */
+            background-color: rgba(22, 33, 62, 0.9); /* Slightly transparent background */
+            border-radius: 1.2rem; /* Slightly less rounded corners for compactness */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); /* Stronger shadow */
+            max-width: 350px; /* Even smaller width */
+            width: 100%;
+            padding: 1.5rem; /* Reduced padding */
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem; /* Reduced gap */
+            z-index: 10; /* Ensure it's above the 3D background */
+            color: #e0e0e0; /* Light text color */
+            pointer-events: auto; /* Ensure buttons are clickable */
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+
+        @media (max-width: 768px) {
+            .game-container {
+                top: 0.75rem;
+                left: 0.75rem;
+                max-width: calc(100% - 1.5rem); /* Adjust for smaller screens */
+                padding: 1rem;
+            }
+        }
+
+        .text-display {
+            background-color: rgba(15, 52, 96, 0.8); /* Slightly transparent dark blue */
+            border-radius: 0.8rem; /* Slightly less rounded */
+            padding: 1.2rem; /* Reduced padding */
+            min-height: 100px; /* Smaller height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 0.9rem; /* Smaller text */
+            line-height: 1.4rem;
+            box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.4); /* Inner shadow */
+        }
+        .text-display h2 {
+            font-size: 1.3rem; /* Smaller title */
+            margin-bottom: 0.6rem;
+        }
+        .options-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem; /* Reduced gap */
+        }
+        .game-button {
+            background-image: linear-gradient(to right, #e94560, #e60026);
+            color: white;
+            padding: 0.7rem 1rem; /* Smaller padding */
+            border-radius: 0.75rem;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2); /* Smaller shadow */
+            font-size: 0.9rem; /* Slightly smaller font */
+        }
+        .game-button:hover {
+            transform: translateY(-1px); /* Smaller hover effect */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            background-image: linear-gradient(to right, #c73751, #bf0020);
+        }
+        .game-button:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="threeCanvas"></canvas> <!-- Three.js rendering canvas -->
+
+    <div id="gameContainer" class="game-container">
+        <div id="textDisplay" class="text-display">
+            <!-- Game text will be displayed here -->
+        </div>
+        <div id="optionsContainer" class="options-container">
+            <!-- Game options (buttons) will be rendered here -->
+        </div>
+    </div>
+
+    <script>
+        // Get references to HTML elements
+        const textDisplay = document.getElementById('textDisplay');
+        const optionsContainer = document.getElementById('optionsContainer');
+        const threeCanvas = document.getElementById('threeCanvas');
+
+        // Three.js variables
+        let scene, camera, renderer;
+        let currentSceneObjects = []; // To store and clear objects of the current 3D scene
+        let mouseX = 0, mouseY = 0; // Mouse position for camera interaction
+        let isMouseDown = false; // Flag for mouse drag
+        let enterpriseShip; // Global reference for the spaceship to animate it
+
+        // Game states (text and navigation)
+        const gameStates = {
+            'start': {
+                text: "Bienvenue dans l'UNIVERS N-X-U 2.0 ! Explorez une architecture cognitive fascinante, des Superamas de Galaxies aux plus petites Particules Informationnelles.",
+                options: [{ text: "Commencer l'exploration", nextState: 'superamas' }],
+                sceneType: 'stars'
+            },
+            'superamas': {
+                title: "Superamas de Galaxies (Méta-Domaines Cognitifs)",
+                text: "Vous êtes au cœur d'un Superamas de Galaxies, un vaste Méta-Domaine Cognitif. Ici résident des concepts fondamentaux et des interconnexions à l'échelle cosmique.",
+                options: [
+                    { text: "Entrer dans une Galaxie (Domaines Spécialisés)", nextState: 'galaxie' },
+                    { text: "Quitter l'UNIVERS N-X-U 2.0", nextState: 'end' }
+                ],
+                sceneType: 'nebula'
+            },
+            'galaxie': {
+                title: "Galaxies (Domaines Spécialisés)",
+                text: "Vous avez pénétré dans une Galaxie, un Domaine Spécialisé de connaissance. Chaque galaxie représente un champ d'expertise ou un ensemble de compétences.",
+                options: [
+                    { text: "Voyager vers un Système Solaire (Clusters Fonctionnels)", nextState: 'systemeSolaire' },
+                    { text: "Retourner au Superamas de Galaxies", nextState: 'superamas' }
+                ],
+                sceneType: 'galaxySpiral'
+            },
+            'systemeSolaire': {
+                title: "Systèmes Solaires (Clusters Fonctionnels)",
+                text: "Vous êtes arrivé dans un Système Solaire, un Cluster Fonctionnel. Ces systèmes regroupent des fonctions et des processus spécifiques.",
+                options: [
+                    { text: "Approcher une Étoile Titan (Supernœuds)", nextState: 'etoileTitan' },
+                    { text: "Retourner à la Galaxie", nextState: 'galaxie' }
+                ],
+                sceneType: 'solarSystem'
+            },
+            'etoileTitan': {
+                title: "Étoiles Titans (Supernœuds)",
+                text: "Vous vous approchez d'une Étoile Titan, un Supernœud d'information. Ce sont des points centraux de grande puissance et de connectivité.",
+                options: [
+                    { text: "Atterrir sur une Planète Cognitive (Nœuds Spécialisés)", nextState: 'planeteCognitive' },
+                    { text: "Retourner au Système Solaire", nextState: 'systemeSolaire' }
+                ],
+                sceneType: 'pulsingStar'
+            },
+            'planeteCognitive': {
+                title: "Planètes Cognitives (Nœuds Spécialisés)",
+                text: "Vous avez atterri sur une Planète Cognitive, un Nœud Spécialisé. Chaque planète est dédiée à une tâche ou un concept précis.",
+                options: [
+                    { text: "Contacter un Satellite Neuronal (Chatbots)", nextState: 'satelliteNeuronal' },
+                    { text: "Retourner à l'Étoile Titan", nextState: 'etoileTitan' }
+                ],
+                sceneType: 'cognitivePlanet'
+            },
+            'satelliteNeuronal': {
+                title: "Satellites Neuronaux (Chatbots)",
+                text: "Vous avez établi le contact avec un Satellite Neuronal, un Chatbot. Ces entités sont conçues pour interagir et fournir des informations ciblées. Le Chatbot vous dit : 'Bienvenue, explorateur. Comment puis-je vous aider ?'",
+                options: [
+                    { text: "Demander des Particules Informationnelles (Données)", nextState: 'particulesInformationnelles' },
+                    { text: "Retourner à la Planète Cognitive", nextState: 'planeteCognitive' }
+                ],
+                sceneType: 'neuralNetwork'
+            },
+            'particulesInformationnelles': {
+                title: "Particules Informationnelles (Données)",
+                text: "Le Chatbot vous fournit des Particules Informationnelles... Ce sont les unités fondamentales de données, les briques de toute connaissance. Félicitations ! Vous avez atteint le niveau le plus granulaire de l'UNIVERS N-X-U 2.0.",
+                options: [
+                    { text: "Revenir au début (Superamas de Galaxies)", nextState: 'superamas' },
+                    { text: "Quitter l'UNIVERS N-X-U 2.0", nextState: 'end' }
+                ],
+                sceneType: 'dataParticles'
+            },
+            'end': {
+                text: "Merci d'avoir exploré l'UNIVERS N-X-U 2.0. À bientôt !",
+                options: [], // No options, game ends
+                sceneType: 'end'
+            }
+        };
+
+        let currentState = 'start'; // Initial game state
+
+        /**
+         * Initializes the Three.js scene, camera, and renderer.
+         * Sets up the animation loop.
+         */
+        function initThreeJS() {
+            // Scene
+            scene = new THREE.Scene();
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 1); // Set background to black
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(0, 0, 1);
+            scene.add(directionalLight);
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize);
+
+            // Mouse interaction for camera rotation
+            threeCanvas.addEventListener('mousedown', onMouseDown);
+            threeCanvas.addEventListener('mouseup', onMouseUp);
+            threeCanvas.addEventListener('mousemove', onMouseMove);
+
+            animate(); // Start the animation loop
+        }
+
+        /**
+         * Resizes the renderer and updates the camera aspect ratio on window resize.
+         */
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /**
+         * Handles mouse down event to enable camera rotation.
+         * @param {MouseEvent} event - The mouse event.
+         */
+        function onMouseDown(event) {
+            isMouseDown = true;
+            mouseX = event.clientX; // Capture initial mouse position
+            mouseY = event.clientY;
+        }
+
+        /**
+         * Handles mouse up event to disable camera rotation.
+         * @param {MouseEvent} event - The mouse event.
+         */
+        function onMouseUp(event) {
+            isMouseDown = false;
+        }
+
+        /**
+         * Handles mouse move event for camera rotation when mouse is down.
+         * @param {MouseEvent} event - The mouse event.
+         */
+        function onMouseMove(event) {
+            if (!isMouseDown) return;
+            const deltaX = event.clientX - mouseX;
+            const deltaY = event.clientY - mouseY;
+
+            // Rotate scene based on mouse movement
+            // Apply rotation to the entire scene, or a group containing the scene objects
+            scene.rotation.y += deltaX * 0.005;
+            scene.rotation.x += deltaY * 0.005;
+
+            // Clamp rotation to prevent flipping
+            scene.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, scene.rotation.x));
+
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        }
+
+        /**
+         * Creates a simplified 3D model of the Star Trek Enterprise.
+         * @returns {THREE.Group} - A group containing all parts of the spaceship.
+         */
+        function createEnterpriseShip() {
+            const shipGroup = new THREE.Group();
+            const material = new THREE.MeshLambertMaterial({ color: 0xcccccc }); // Light grey for the ship
+
+            // Saucer Section (Primary Hull)
+            const saucerGeometry = new THREE.CylinderGeometry(0.8, 0.8, 0.15, 64);
+            const saucer = new THREE.Mesh(saucerGeometry, material);
+            saucer.rotation.x = Math.PI / 2; // Rotate to be horizontal
+            saucer.position.y = 0.5; // Position above the main hull
+            shipGroup.add(saucer);
+
+            // Main Hull (Secondary Hull)
+            const mainHullGeometry = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 32);
+            const mainHull = new THREE.Mesh(mainHullGeometry, material);
+            mainHull.position.y = -0.5;
+            shipGroup.add(mainHull);
+
+            // Neck connecting saucer to main hull
+            const neckGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.4, 16);
+            const neck = new THREE.Mesh(neckGeometry, material);
+            neck.position.set(0, 0.1, 0); // Connects to the bottom of saucer and top of main hull
+            shipGroup.add(neck);
+
+            // Nacelles (Engine Pods)
+            const nacelleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.0, 32);
+            const nacelleMaterial = new THREE.MeshLambertMaterial({ color: 0xbbbbbb, emissive: 0x0000ff, emissiveIntensity: 0.3 }); // Blue glow
+            
+            const nacelle1 = new THREE.Mesh(nacelleGeometry, nacelleMaterial);
+            nacelle1.rotation.z = Math.PI / 2; // Rotate to be horizontal
+            nacelle1.position.set(0.7, -0.3, 0.6); // Position relative to main hull
+            shipGroup.add(nacelle1);
+
+            const nacelle2 = new THREE.Mesh(nacelleGeometry, nacelleMaterial);
+            nacelle2.rotation.z = Math.PI / 2;
+            nacelle2.position.set(-0.7, -0.3, 0.6);
+            shipGroup.add(nacelle2);
+
+            // Nacelle connecting pylons
+            const pylonGeometry = new THREE.BoxGeometry(0.1, 0.4, 0.1);
+            const pylonMaterial = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+
+            const pylon1 = new THREE.Mesh(pylonGeometry, pylonMaterial);
+            pylon1.position.set(0.7, 0.05, 0.1);
+            pylon1.rotation.z = 0.2; // Slight angle
+            shipGroup.add(pylon1);
+
+            const pylon2 = new THREE.Mesh(pylonGeometry, pylonMaterial);
+            pylon2.position.set(-0.7, 0.05, 0.1);
+            pylon2.rotation.z = -0.2; // Slight angle
+            shipGroup.add(pylon2);
+
+            // Add a small light to the front of the saucer
+            const lightGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+            const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 1 });
+            const frontLight = new THREE.Mesh(lightGeometry, lightMaterial);
+            frontLight.position.set(0, 0.5, 0.8); // On the edge of the saucer
+            shipGroup.add(frontLight);
+
+
+            shipGroup.scale.set(0.5, 0.5, 0.5); // Scale down the entire ship
+            shipGroup.rotation.y = Math.PI / 2; // Initial rotation to face along Z-axis
+
+            return shipGroup;
+        }
+
+
+        /**
+         * Main animation loop for Three.js.
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Apply specific animations based on current scene type
+            const state = gameStates[currentState];
+            if (state && typeof state.sceneType === 'string') {
+                switch (state.sceneType) {
+                    case 'galaxySpiral':
+                        // Rotate the galaxy
+                        if (currentSceneObjects[0]) {
+                             currentSceneObjects[0].rotation.y += 0.0005;
+                        }
+                        break;
+                    case 'pulsingStar':
+                        // Make the star pulse
+                        if (currentSceneObjects[0]) {
+                            const scale = 1 + Math.sin(Date.now() * 0.001) * 0.1;
+                            currentSceneObjects[0].scale.set(scale, scale, scale);
+                        }
+                        break;
+                    case 'solarSystem':
+                        // Orbit planets around the sun
+                        if (currentSceneObjects[0] && currentSceneObjects[0].children.length > 0) {
+                            currentSceneObjects[0].children.forEach((obj, index) => {
+                                if (obj.name === 'sun') return; // Don't orbit the sun
+                                if (obj.name === 'enterprise') { // Animate the Enterprise
+                                    obj.position.z -= 0.05; // Move forward
+                                    if (obj.position.z < -15) { // Reset if too far
+                                        obj.position.z = 15;
+                                        obj.position.x = (Math.random() - 0.5) * 5; // Random start x
+                                        obj.position.y = (Math.random() - 0.5) * 5; // Random start y
+                                    }
+                                    obj.rotation.y += 0.005; // Gentle rotation
+                                    return;
+                                }
+
+                                const orbitSpeed = 0.0005 * (index + 1) * 0.5; // Slower, varied speeds
+                                const orbitRadius = 2 + index * 0.8; // Larger, more distinct orbits
+                                obj.position.x = Math.sin(Date.now() * orbitSpeed) * orbitRadius;
+                                obj.position.z = Math.cos(Date.now() * orbitSpeed) * orbitRadius;
+                                obj.rotation.y += 0.01; // Self-rotation for planets
+                            });
+                        }
+                        break;
+                    case 'dataParticles':
+                        // Move particles
+                        if (currentSceneObjects[0]) { // Group containing individual spheres
+                             currentSceneObjects[0].rotation.y += 0.002;
+                             currentSceneObjects[0].rotation.x += 0.001;
+                             currentSceneObjects[0].children.forEach(p => {
+                                 p.position.z -= 0.05; // Move particles forward
+                                 if (p.position.z < -5) { // Reset if too far
+                                     p.position.z = 5;
+                                     p.position.x = (Math.random() - 0.5) * 10; // Random X for variety
+                                     p.position.y = (Math.random() - 0.5) * 10; // Random Y for variety
+                                 }
+                             });
+                        }
+                        break;
+                    case 'neuralNetwork':
+                        // Simple rotation for network visualization
+                        if (currentSceneObjects[0]) {
+                            currentSceneObjects[0].rotation.y += 0.001;
+                            currentSceneObjects[0].rotation.x += 0.0005;
+                        }
+                        break;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        /**
+         * Clears all current 3D objects from the scene.
+         */
+        function clearThreeJSScene() {
+            currentSceneObjects.forEach(obj => {
+                scene.remove(obj);
+                // Dispose geometries and materials to free up memory
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                        obj.material.forEach(m => m.dispose());
+                    } else {
+                        obj.material.dispose();
+                    }
+                }
+            });
+            currentSceneObjects = []; // Reset the array
+        }
+
+        /**
+         * Updates the Three.js scene based on the current game state.
+         * @param {string} sceneType - The type of 3D scene to create.
+         */
+        function updateThreeJSScene(sceneType) {
+            clearThreeJSScene(); // Clear previous scene
+
+            // Reset camera position and rotation for new scenes
+            camera.position.set(0, 0, 5);
+            scene.rotation.set(0, 0, 0); // Reset scene rotation
+
+            let newObjects = [];
+            let geometry, material, mesh;
+            const detail = 16; // General detail for spheres (segments)
+
+            switch (sceneType) {
+                case 'stars':
+                    // A field of small spheres (stars)
+                    const starGroup = new THREE.Group();
+                    const starCount = 250; // Reduced count for performance with spheres
+                    const starGeometry = new THREE.SphereGeometry(0.05, detail, detail); // Small spheres
+                    for (let i = 0; i < starCount; i++) {
+                        const starMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                        const star = new THREE.Mesh(starGeometry, starMaterial);
+                        star.position.set(
+                            (Math.random() * 2 - 1) * 30,
+                            (Math.random() * 2 - 1) * 30,
+                            (Math.random() * 2 - 1) * 30
+                        );
+                        starGroup.add(star);
+                    }
+                    newObjects.push(starGroup);
+                    camera.position.z = 30; // Zoom out to see more stars
+                    break;
+
+                case 'nebula':
+                    // Large, diffused particle cloud made of fuzzy spheres
+                    const nebulaGroup = new THREE.Group();
+                    const nebulaSphereCount = 800; // Reduced count for performance
+                    const nebulaSphereGeometry = new THREE.SphereGeometry(0.2, detail, detail);
+                    for (let i = 0; i < nebulaSphereCount; i++) {
+                        const nebulaSphereMaterial = new THREE.MeshBasicMaterial({
+                            color: 0x8800ff,
+                            transparent: true,
+                            opacity: 0.1, // Very low opacity for diffuse effect
+                            blending: THREE.AdditiveBlending
+                        });
+                        const nebulaSphere = new THREE.Mesh(nebulaSphereGeometry, nebulaSphereMaterial);
+                        nebulaSphere.position.set(
+                            (Math.random() * 2 - 1) * 15,
+                            (Math.random() * 2 - 1) * 15,
+                            (Math.random() - 0.5) * 15
+                        ); // Slightly spread Z
+                        nebulaGroup.add(nebulaSphere);
+                    }
+                    newObjects.push(nebulaGroup);
+                    camera.position.z = 20; // Adjust camera for nebula
+                    break;
+
+                case 'galaxySpiral':
+                    // Simple spiral galaxy made of small spheres
+                    const galaxyGroup = new THREE.Group();
+                    const armCount = 3;
+                    const particlesPerArm = 500; // Reduced count for spheres
+                    const armSpread = 5; // How far particles spread from center
+                    const galaxySphereGeometry = new THREE.SphereGeometry(0.03, detail, detail); // Very small spheres
+
+                    for (let i = 0; i < armCount; i++) {
+                        const armAngleOffset = (Math.PI * 2 / armCount) * i;
+                        const armColor = new THREE.Color().setHSL(Math.random(), 0.8, 0.6); // Vivid random color
+                        for (let j = 0; j < particlesPerArm; j++) {
+                            const angle = j / particlesPerArm * Math.PI * 8 + armAngleOffset; // Spiral angle
+                            const radius = Math.sqrt(j / particlesPerArm) * armSpread; // Radius growth
+                            const x = Math.cos(angle) * radius;
+                            const y = (Math.random() - 0.5) * 0.3; // Small thickness
+                            const z = Math.sin(angle) * radius;
+
+                            const particleMaterial = new THREE.MeshBasicMaterial({ color: armColor });
+                            const particle = new THREE.Mesh(galaxySphereGeometry, particleMaterial);
+                            particle.position.set(x, y, z);
+                            galaxyGroup.add(particle);
+                        }
+                    }
+                    newObjects.push(galaxyGroup);
+                    camera.position.z = 10;
+                    break;
+
+                case 'solarSystem':
+                    // A central "sun" and orbiting "planets" - already spheres
+                    const solarSystemGroup = new THREE.Group();
+                    // Sun
+                    geometry = new THREE.SphereGeometry(1, 32, 32);
+                    material = new THREE.MeshBasicMaterial({ color: 0xffa500 });
+                    const sun = new THREE.Mesh(geometry, material);
+                    sun.name = 'sun'; // Name to exclude from planet orbit logic
+                    solarSystemGroup.add(sun);
+
+                    // Planets
+                    const planetCount = 4;
+                    for (let i = 0; i < planetCount; i++) {
+                        const planetGeometry = new THREE.SphereGeometry(0.2 + i * 0.05, 32, 32); // Increased detail for smoother planets
+                        const planetMaterial = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+                        const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+                        // Initial position for planets, animation will handle orbit
+                        planet.position.set(2 + i * 1.5, 0, 0);
+                        solarSystemGroup.add(planet);
+                    }
+
+                    // Add the Enterprise ship
+                    enterpriseShip = createEnterpriseShip();
+                    enterpriseShip.name = 'enterprise'; // Give it a name for animation logic
+                    enterpriseShip.position.set(0, 0, 15); // Start position for traveling
+                    solarSystemGroup.add(enterpriseShip);
+
+                    newObjects.push(solarSystemGroup);
+                    camera.position.z = 10; // Zoom out for solar system
+                    break;
+
+                case 'pulsingStar':
+                    // A large, glowing sphere that pulses - already spheres
+                    geometry = new THREE.SphereGeometry(1, 64, 64);
+                    material = new THREE.MeshBasicMaterial({ color: 0xffdd00, emissive: 0xffdd00, emissiveIntensity: 0.8 });
+                    mesh = new THREE.Mesh(geometry, material);
+                    newObjects.push(mesh);
+
+                    // Add a glow effect
+                    const glowGeometry = new THREE.SphereGeometry(1.2, 64, 64);
+                    const glowMaterial = new THREE.ShaderMaterial({
+                        uniforms: {
+                            'c': { type: 'f', value: 0.1 },
+                            'p': { type: 'f', value: 4.0 },
+                            glowColor: { type: 'c', value: new THREE.Color(0xffaa00) },
+                            viewVector: { type: 'v3', value: camera.position }
+                        },
+                        vertexShader: `
+                            uniform vec3 viewVector;
+                            uniform float c;
+                            uniform float p;
+                            varying float intensity;
+                            void main() {
+                                vec3 vNormal = normalize( normalMatrix * normal );
+                                vec3 vNormel = normalize( normalMatrix * viewVector );
+                                intensity = pow( c - dot(vNormal, vNormel), p );
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                            }
+                        `,
+                        fragmentShader: `
+                            uniform vec3 glowColor;
+                            varying float intensity;
+                            void main() {
+                                vec3 glow = glowColor * intensity;
+                                gl_FragColor = vec4( glow, 1.0 );
+                            }
+                        `,
+                        side: THREE.BackSide,
+                        blending: THREE.AdditiveBlending,
+                        transparent: true
+                    });
+                    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+                    mesh.add(glowMesh); // Attach glow to the star
+                    break;
+
+                case 'cognitivePlanet':
+                    // A sphere with a more defined grid
+                    geometry = new THREE.SphereGeometry(1.5, 64, 64); // Increased detail for smoother planet
+                    material = new THREE.MeshStandardMaterial({ color: 0x2ecc71, roughness: 0.5, metalness: 0.5 });
+                    mesh = new THREE.Mesh(geometry, material);
+                    newObjects.push(mesh);
+
+                    // Add a simple grid using lines
+                    const divisions = 20; // More divisions for a finer grid
+                    const gridColor = new THREE.Color(0x00ff00);
+                    const lines = new THREE.Group();
+                    for (let i = 0; i <= divisions; i++) {
+                        const phi = (i / divisions) * Math.PI;
+                        const radius = 1.5; // Match planet radius
+
+                        // Latitude circles
+                        const latPoints = [];
+                        for (let j = 0; j <= divisions * 2; j++) {
+                            const theta = (j / (divisions * 2)) * Math.PI * 2;
+                            latPoints.push(new THREE.Vector3(
+                                radius * Math.sin(phi) * Math.cos(theta),
+                                radius * Math.cos(phi),
+                                radius * Math.sin(phi) * Math.sin(theta)
+                            ));
+                        }
+                        lines.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(latPoints), new THREE.LineBasicMaterial({ color: gridColor, opacity: 0.4, transparent: true })));
+
+                        // Longitude lines (only for half, to avoid double drawing)
+                        if (i < divisions) {
+                            const lonPoints = [];
+                            const theta = (i / divisions) * Math.PI * 2;
+                            for (let j = 0; j <= divisions; j++) {
+                                const phi2 = (j / divisions) * Math.PI;
+                                lonPoints.push(new THREE.Vector3(
+                                    radius * Math.sin(phi2) * Math.cos(theta),
+                                    radius * Math.cos(phi2),
+                                    radius * Math.sin(phi2) * Math.sin(theta)
+                                ));
+                            }
+                            lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lonPoints), new THREE.LineBasicMaterial({ color: gridColor, opacity: 0.4, transparent: true })));
+                        }
+                    }
+                    mesh.add(lines);
+                    camera.position.z = 4;
+                    break;
+
+                case 'neuralNetwork':
+                    // Representing nodes (smoother spheres) and connections
+                    const networkGroup = new THREE.Group();
+                    const nodeCount = 50;
+                    const nodes = [];
+                    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x9b59b6, transparent: true, opacity: 0.5 });
+
+                    // Create nodes (spheres)
+                    for (let i = 0; i < nodeCount; i++) {
+                        const nodeGeometry = new THREE.SphereGeometry(0.05, detail, detail); // Increased detail for smoother nodes
+                        const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0x3498db });
+                        const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+                        node.position.set(
+                            (Math.random() - 0.5) * 5,
+                            (Math.random() - 0.5) * 5,
+                            (Math.random() - 0.5) * 5
+                        );
+                        networkGroup.add(node);
+                        nodes.push(node);
+                    }
+
+                    // Create connections (lines) between random nodes
+                    const maxConnections = 100;
+                    for (let i = 0; i < maxConnections; i++) {
+                        const node1 = nodes[Math.floor(Math.random() * nodeCount)];
+                        const node2 = nodes[Math.floor(Math.random() * nodeCount)];
+                        if (node1 !== node2) {
+                            const points = [];
+                            points.push(node1.position);
+                            points.push(node2.position);
+                            const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                            const line = new THREE.Line(lineGeometry, lineMaterial);
+                            networkGroup.add(line);
+                        }
+                    }
+                    newObjects.push(networkGroup);
+                    camera.position.z = 8;
+                    break;
+
+                case 'dataParticles':
+                    // Fast-moving small spheres
+                    const dataParticleGroup = new THREE.Group();
+                    const dataParticleCount = 500; // Reduced count for performance with spheres
+                    const dataParticleGeometry = new THREE.SphereGeometry(0.04, detail, detail); // Small spheres
+                    for (let i = 0; i < dataParticleCount; i++) {
+                        const dataParticleMaterial = new THREE.MeshBasicMaterial({
+                            color: 0x3498db,
+                            transparent: true,
+                            opacity: 0.9,
+                            blending: THREE.AdditiveBlending
+                        });
+                        const dataParticle = new THREE.Mesh(dataParticleGeometry, dataParticleMaterial);
+                        dataParticle.position.set(
+                            (Math.random() - 0.5) * 10,
+                            (Math.random() - 0.5) * 10,
+                            (Math.random() - 0.5) * 10
+                        );
+                        dataParticleGroup.add(dataParticle);
+                    }
+                    newObjects.push(dataParticleGroup);
+                    camera.position.z = 5;
+                    break;
+
+                case 'end':
+                    // Simple black background or fading stars
+                    renderer.setClearColor(0x000000, 1);
+                    // Optionally, add fading stars like the start state
+                    updateThreeJSScene('stars');
+                    break;
+
+                default:
+                    // Default to stars if sceneType is undefined
+                    updateThreeJSScene('stars');
+                    break;
+            }
+
+            newObjects.forEach(obj => scene.add(obj));
+            currentSceneObjects = newObjects;
+        }
+
+        /**
+         * Renders the current game state (text and options) to the HTML page.
+         * Also updates the 3D background based on the current state.
+         * @param {string} stateKey - The key of the state to render from `gameStates`.
+         */
+        function renderState(stateKey) {
+            const state = gameStates[stateKey];
+            if (!state) {
+                console.error("État de jeu introuvable:", stateKey);
+                return;
+            }
+
+            // Update text display
+            let titleHtml = state.title ? `<h2 class="text-2xl font-semibold mb-4">${state.title}</h2>` : '';
+            textDisplay.innerHTML = `<div class="flex flex-col items-center justify-center h-full">
+                                        ${titleHtml}
+                                        <p>${state.text}</p>
+                                     </div>`;
+
+            // Clear previous options
+            optionsContainer.innerHTML = '';
+
+            // Update the 3D scene
+            updateThreeJSScene(state.sceneType);
+
+            // Create buttons for new options
+            state.options.forEach(option => {
+                const button = document.createElement('button');
+                button.classList.add('game-button');
+                button.textContent = option.text;
+                button.addEventListener('click', () => {
+                    currentState = option.nextState;
+                    renderState(currentState);
+                });
+                optionsContainer.appendChild(button);
+            });
+        }
+
+        // Initialize Three.js and the game when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initThreeJS();
+            renderState(currentState);
+        });
+    </script>
+</body>
+</html>
+# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
+# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+
+name: Node.js Package
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+
+  publish-gpr:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com/
+      - run: npm ci
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
